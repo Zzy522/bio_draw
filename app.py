@@ -273,7 +273,7 @@ with col_info:
     
     # 将管理员专区放在左侧下方的一个折叠面板里，隐藏得更深一些
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("🛡️ 管理员后台专区", expanded=False):
+    with st.expander("🛡️ 管理员", expanded=False):
         pwd = st.text_input("请输入管理员密码解锁：", type="password")
         if pwd == ADMIN_PASSWORD:
             st.success("身份验证成功！您现在可以管理所有留言。")
@@ -295,7 +295,7 @@ with col_info:
                 with open(FORUM_FILE, "rb") as file:
                     st.download_button("📥 导出全部留言 (CSV)", data=file, file_name="forum_backup.csv", mime="text/csv")
         elif pwd != "":
-            st.error("密码错误！")
+            st.error("求求你别搞我~")
 
 with col_forum:
     st.markdown("### 💬 提问交流与建议反馈")
