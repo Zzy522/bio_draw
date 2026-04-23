@@ -4,11 +4,47 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import io
+import os
+import datetime
 import warnings
 
+# 忽略曲线拟合时的数学警告
 warnings.filterwarnings('ignore')
 
-# --- 核心计算函数 ---
+# ================= 1. 访问统计与反馈持久化逻辑 =================
+def get_visitor_count():
+    count_file = "visitor_count.txt"
+    if not os.path.exists(count_file):
+        with open(count_file, "w") as f: f.write("100")
+    with open(count_file, "r") as f:
+        try: count = int(f.read())
+        except: count = 100
+    return count
+
+def update_visitor_count():
+    count = get_visitor_count() + 1
+    with open("visitor_count.txt", "w") as f: f.write(str(count))
+    return count
+
+def save_feedback(text):
+    feedback_file = "feedback_log.csv"
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not os.path.exists(feedback_file):
+        with open(feedback_file, "w", encoding="utf-8-sig") as f:
+            f.write("时间,内容\n")
+    with open(feedback_file, "a", encoding="utf-8-sig") as f:
+        # 替换英文逗号防止破坏 CSV 格式
+        safe_text = text.replace(',', '，').replace('\n', ' ')
+        f.write(f"{timestamp},{safe_text}\n")
+
+# 防止同一用户刷新页面导致重复计数
+if 'visited' not in st.session_state:
+    st.session_state.visited = True
+    current_visits = update_visitor_count()
+else:
+    current_visits = get_visitor_count()
+
+# ================= 2. 核心数学与绘图引擎 =================
 def four_pl_model(x, bottom, top, ec50, hill_slope):
     x = np.maximum(x, 1e-10) 
     return bottom + (top - bottom) / (1 + (ec50 / x)**hill_slope)
@@ -26,6 +62,10 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
             
         try:
             df = pd.read_csv(io.StringIO(group['raw_text'].strip()), sep=r'\s+', header=None)
+            if df.shape[1] < n_reps + 1:
+                st.warning(f"[{group['name']}] 数据列数不足，跳过绘制。")
+                continue
+                
             x_raw = df.iloc[:, 0].astype(float).values
             y_replicates = df.iloc[:, 1:n_reps+1].astype(float).values
             
@@ -47,6 +87,7 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
 
             for i in range(n_reps):
                 y_rep = y_replicates[:, i]
+                # 按照最高浓度点提取 Dmax
                 idx_max_conc = np.argmax(x_mapped)
                 dmax_list.append(y_rep[idx_max_conc]) 
                 
@@ -62,6 +103,7 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
             
             dmax_str = f"{mean_dmax:.2f}±{sd_dmax:.2f}%" if len(dmax_list) > 1 else f"{mean_dmax:.2f}%"
             
+            # Dmax < 50% 判定逻辑
             if mean_dmax < 50.0:
                 dc50_str = f"> {max_conc} {unit}"
             else:
@@ -76,11 +118,13 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
             
             legend_label = f"{group['name']}\n$DC_{{50}}$={dc50_str} ; $D_{{max}}$={dmax_str}" if show_params else group['name']
             
+            # 画点/误差棒
             if mean_dmax >= 50.0 and n_reps > 1:
                 ax.errorbar(x_mapped, y_mean, yerr=y_sd, fmt=group['marker'], color=group['color'], ecolor=group['color'], elinewidth=1.5, capsize=group['cap'], label=legend_label, zorder=5)
             else:
                 ax.scatter(x_mapped, y_mean, color=group['color'], marker=group['marker'], s=60, label=legend_label, zorder=5)
 
+            # 画平滑曲线
             try:
                 popt_mean, _ = curve_fit(four_pl_model, x_mapped, y_mean, p0=[np.min(y_mean), np.max(y_mean), np.median(x_mapped), 1.0], maxfev=10000)
                 x_smooth = np.logspace(np.log10(np.min(x_mapped)), np.log10(np.max(x_mapped)), 200)
@@ -102,9 +146,12 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
     ax.set_title(title, fontweight='bold', pad=15)
     ax.set_xlabel(f"{xlabel} ({unit})", fontweight='bold')
     ax.set_ylabel(ylabel, fontweight='bold')
+    
+    # 固定纵坐标范围
     ax.set_ylim(-5, 105)
     ax.set_yticks(np.arange(0, 101, 20))
     
+    # 工业标准排版风格
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['left'].set_linewidth(1.5)
@@ -114,33 +161,38 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
     
     return fig, report_texts
 
-# --- 网页 UI 构建 ---
+# ================= 3. 网页 UI 构建 =================
 st.set_page_config(page_title="Dose-Response Fitter", layout="wide")
-st.title("🔬 药物剂量-效应曲线在线拟合工具")
-st.markdown("支持降解剂 ($DC_{50}$) / 抑制剂 ($IC_{50}$) 的多参数 4PL 拟合，由 Streamlit 强力驱动。")
 
-# 全局设置区域
-st.sidebar.header("⚙️ 全局设置")
+# --- 侧边栏：宣传与全局设置 ---
+st.sidebar.title("秦冲课题组 (Qin Lab)")
+st.sidebar.markdown(f"📊 **累计使用人次**: `{current_visits}`")
+st.sidebar.success("📢 **生信、AI交流**\n\n欢迎 +v: **Jingzbdcjl**")
+st.sidebar.markdown("---")
+
+st.sidebar.header("⚙️ 全局图表设置")
 n_reps = st.sidebar.number_input("实验重复数 (n):", min_value=1, value=3)
-num_groups = st.sidebar.number_input("数据组数:", min_value=1, max_value=10, value=3)
+num_groups = st.sidebar.number_input("需要几组数据?:", min_value=1, max_value=10, value=3)
 ui_unit = st.sidebar.selectbox("浓度单位:", ['nM', 'uM', 'pM', 'mM'])
 ui_dpi = st.sidebar.selectbox("图表清晰度 (DPI):", [150, 300, 600])
-ui_show_params = st.sidebar.checkbox("图例中显示参数", value=False)
+ui_show_params = st.sidebar.checkbox("在图例中显示参数", value=False)
 
 st.sidebar.markdown("---")
 ui_title = st.sidebar.text_input("图表标题:", "Degradation Curve")
 ui_xlabel = st.sidebar.text_input("X轴名称:", "Concentration")
 ui_ylabel = st.sidebar.text_input("Y轴名称:", "Degradation Ratio (%)")
 
-# 颜色和形状映射表
-COLORS = {'深蓝色': '#1f77b4', '深红色': '#d62728', '森林绿': '#2ca02c', '紫色': '#9467bd', '橙色': '#ff7f0e', '黑色': 'black'}
-MARKERS = {'圆点 (●)': 'o', '方块 (■)': 's', '正三角 (▲)': '^', '倒三角 (▼)': 'v'}
+# --- 主页面：标题与数据输入 ---
+st.title("🔬 药物剂量-效应曲线在线拟合工具")
+st.markdown("支持降解剂 ($DC_{50}$) / 抑制剂 ($IC_{50}$) 的多参数 4PL 拟合。")
 
-# 数据输入区域
+COLORS = {'深蓝色': '#1f77b4', '深红色': '#d62728', '森林绿': '#2ca02c', '紫色': '#9467bd', '橙色': '#ff7f0e', '黑色': 'black'}
+MARKERS = {'圆点 (●)': 'o', '方块 (■)': 's', '正三角 (▲)': '^', '倒三角 (▼)': 'v', '菱形 (◆)': 'D', '叉号 (×)': 'x'}
+
 tabs = st.tabs([f"数据组 {i+1}" for i in range(num_groups)])
 groups_data = []
 
-default_data = "0.1\t0.095\t0.101\t0.334\n1\t0.116\t0.130\t0.396\n10\t0.140\t0.164\t0.478\n100\t0.183\t0.204\t0.643\n1000\t0.367\t0.376\t0.855\n10000\t0.698\t0.667\t0.922\n100000\t1.002\t0.998\t0.996"
+default_data = "0.01\t0\t0\t0\n1\t20.01\t27.28\t16.27\n10\t31.67\t30.58\t27.72\n100\t61.83\t59.60\t41.46\n1000\t66.34\t62.44\t45.98\n10000\t63.18\t64.93\t52.60"
 
 for i in range(num_groups):
     with tabs[i]:
@@ -150,35 +202,68 @@ for i in range(num_groups):
         g_mode = col3.selectbox("数据类型:", ['降解率 (Degradation)', '保留率 (Retention)'], key=f"mode_{i}")
         g_color = col4.selectbox("散点颜色:", list(COLORS.keys()), index=i%len(COLORS), key=f"color_{i}")
         
-        col1_2, col2_2, col3_2 = st.columns(3)
+        col1_2, col2_2, col3_2 = st.columns([1, 1, 2])
         g_marker = col1_2.selectbox("散点形状:", list(MARKERS.keys()), index=i%len(MARKERS), key=f"marker_{i}")
         g_cap = col2_2.number_input("误差棒短线长:", value=3.0, key=f"cap_{i}")
         
-        g_raw = st.text_area("从 Excel 粘贴数据 (第1列浓度，后续为比例/百分比):", value=default_data if i==0 else "", height=150, key=f"raw_{i}")
+        g_raw = st.text_area("从 Excel 粘贴数据 (制表符/空格分隔，第1列浓度，后续为比例/百分比):", 
+                             value=default_data if i==0 else "", height=180, key=f"raw_{i}")
         
         groups_data.append({
             'enabled': g_enable, 'name': g_name, 'data_mode': g_mode,
             'color': COLORS[g_color], 'marker': MARKERS[g_marker], 'cap': g_cap, 'raw_text': g_raw
         })
 
-# 绘图生成
+# --- 绘图生成与报告展示 ---
 if st.button("🚀 生成图表与分析报告", use_container_width=True, type="primary"):
-    with st.spinner("正在进行 4PL 曲线拟合..."):
+    with st.spinner("正在执行 4PL 曲线拟合..."):
         fig, reports = process_and_plot(ui_title, ui_xlabel, ui_ylabel, ui_unit, n_reps, groups_data, ui_dpi, ui_show_params)
         
-        # 将图和报告分为左右两列显示
         col_chart, col_report = st.columns([2, 1])
-        
         with col_chart:
             st.pyplot(fig)
             
-            # 提供高清图片下载
             buf = io.BytesIO()
             fig.savefig(buf, format="png", dpi=ui_dpi, bbox_inches='tight')
-            st.download_button(label="📥 下载高清 PNG 图片", data=buf.getvalue(), file_name=f"{ui_title}.png", mime="image/png")
+            st.download_button(label="📥 下载高清 PNG 图片", data=buf.getvalue(), file_name=f"Dose_Response_{datetime.datetime.now().strftime('%H%M%S')}.png", mime="image/png")
             
         with col_report:
             st.success("分析完成！")
             st.markdown("### 📊 参数报告")
             for text in reports:
                 st.markdown(text)
+
+st.markdown("---")
+
+# --- 底部：说明文档与反馈 ---
+col_info, col_feedback = st.columns([3, 2])
+
+with col_info:
+    with st.expander("📖 查看使用说明文档", expanded=False):
+        st.markdown("""
+        ### 🛠 功能说明
+        1. **数据输入**：支持从 Excel 复制粘贴多列数据。第一列为浓度，后续列为对应的重复实验值。小数(如0.95)或百分比(95)系统会自动兼容。
+        2. **DC50 计算逻辑**：
+            - 程序会独立对各列重复实验进行非线性拟合，最终对结果取均值并计算标准差 (SD)。
+            - 智能判定：若 $D_{max} < 50\%$，认定目标药物效能过低，$DC_{50}$ 直接输出 `> 最大给药浓度`。
+        3. **Dmax 计算逻辑**：为避免 Hook 效应对平台期预测的干扰，$D_{max}$ 严格提取最高浓度点处的观测均值。
+        4. **坐标系与 0 浓度映射**：对数 (Log) 坐标系中 0 是不存在的。本工具会自动寻找极小非零浓度，将溶媒对照组 (0 浓度) 映射至其左侧以便直观显示。
+        
+        ### ⚖️ 免责声明
+        本工具采用 Python 生态标准算法库构建，仅供科学研究与学术交流使用。重要结论请结合实验原始图谱人工复核。
+        
+        *系统架构: Python/Streamlit | 算法构建: Zzy522*
+        """)
+
+with col_feedback:
+    st.markdown("### 📝 反馈与建议")
+    with st.form("feedback_form", clear_on_submit=True):
+        user_feedback = st.text_area("需要增加功能？遇到Bug？请留言：", placeholder="您的建议是我们迭代的动力...")
+        submitted = st.form_submit_button("发送给开发者")
+        if submitted and user_feedback:
+            save_feedback(user_feedback)
+            st.toast("反馈已提交，非常感谢！", icon="✅")
+
+    if os.path.exists("feedback_log.csv"):
+        with open("feedback_log.csv", "rb") as file:
+            st.download_button(label="📥 导出所有反馈数据 (仅管理员)", data=file, file_name="feedback_summary.csv", mime="text/csv")
