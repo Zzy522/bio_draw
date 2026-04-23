@@ -236,11 +236,27 @@ if st.button("🚀 生成图表与分析报告", use_container_width=True, type=
 st.markdown("---")
 
 # --- 底部：说明文档与反馈 ---
-col_info, col_feedback = st.columns([3, 2])
+# ================= 4. 底部：说明文档与互动论坛 =================
+st.markdown("---")
+
+# 定义管理员密码 (请自行修改)
+ADMIN_PASSWORD = "5225249"
+FORUM_FILE = "forum_messages.csv"
+
+# 初始化论坛文件
+def init_forum():
+    if not os.path.exists(FORUM_FILE):
+        df = pd.DataFrame(columns=["时间", "昵称", "留言内容"])
+        df.to_csv(FORUM_FILE, index=False, encoding="utf-8-sig")
+
+init_forum()
+
+col_info, col_forum = st.columns([1, 1])
 
 with col_info:
-    with st.expander("📖 查看使用说明文档", expanded=False):
-        st.markdown("""
+    st.markdown("### 📖 工具说明")
+    st.markdown("""
+    **功能概览：**
         ### 🛠 功能说明
         1. **数据输入**：支持从 Excel 复制粘贴多列数据。第一列为浓度，后续列为对应的重复实验值。小数(如0.95)或百分比(95)系统会自动兼容。
         2. **DC50 计算逻辑**：
@@ -254,17 +270,70 @@ with col_info:
         本工具采用 Python 生态标准算法库构建，仅供科学研究与学术交流使用。重要结论请结合实验原始图谱人工复核。
         
         *系统架构: Python/Streamlit | 开发者: Zzy522* 
-        """)
+    """)
+    
+    # 将管理员专区放在左侧下方的一个折叠面板里，隐藏得更深一些
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("🛡️ 管理员后台专区", expanded=False):
+        pwd = st.text_input("请输入管理员密码解锁：", type="password")
+        if pwd == ADMIN_PASSWORD:
+            st.success("身份验证成功！您现在可以管理所有留言。")
+            
+            # 读取当前数据
+            df_forum = pd.read_csv(FORUM_FILE)
+            
+            # 开启数据编辑器 (允许删除行)
+            st.markdown("提示：选中表格左侧的复选框，按 `Delete` 键即可删除不良留言。")
+            edited_df = st.data_editor(df_forum, num_rows="dynamic", use_container_width=True)
+            
+            col_save, col_export = st.columns(2)
+            with col_save:
+                if st.button("💾 保存修改 / 删除", type="primary"):
+                    edited_df.to_csv(FORUM_FILE, index=False, encoding="utf-8-sig")
+                    st.success("后台数据已同步更新！")
+                    st.rerun() # 刷新页面展示最新状态
+            with col_export:
+                with open(FORUM_FILE, "rb") as file:
+                    st.download_button("📥 导出全部留言 (CSV)", data=file, file_name="forum_backup.csv", mime="text/csv")
+        elif pwd != "":
+            st.error("密码错误！")
 
-with col_feedback:
-    st.markdown("### 📝 反馈与建议")
-    with st.form("feedback_form", clear_on_submit=True):
-        user_feedback = st.text_area("需要增加功能？遇到Bug？请留言：", placeholder="您的建议是我们迭代的动力...")
-        submitted = st.form_submit_button("发送给开发者")
-        if submitted and user_feedback:
-            save_feedback(user_feedback)
-            st.toast("反馈已提交，非常感谢！", icon="✅")
-
-    if os.path.exists("feedback_log.csv"):
-        with open("feedback_log.csv", "rb") as file:
-            st.download_button(label="📥 导出所有反馈数据 (仅管理员)", data=file, file_name="feedback_summary.csv", mime="text/csv")
+with col_forum:
+    st.markdown("### 💬 提问交流与建议反馈")
+    
+    # --- 展示历史留言 ---
+    df_msg = pd.read_csv(FORUM_FILE)
+    
+    # 设定一个固定高度的滚动容器展示留言，避免留言太多把网页撑得太长
+    msg_container = st.container(height=300)
+    with msg_container:
+        if len(df_msg) == 0:
+            st.info("暂无留言，快来抢沙发吧！")
+        else:
+            # 倒序遍历，让最新的留言显示在最上面
+            for index, row in df_msg.iloc[::-1].iterrows():
+                st.markdown(f"**👤 {row['昵称']}** `<span style='color:gray;font-size:0.8em;'>{row['时间']}</span>`", unsafe_allow_html=True)
+                st.markdown(f"> {row['留言内容']}")
+                st.markdown("---")
+    
+    # --- 发表新留言 ---
+    with st.form("post_msg_form", clear_on_submit=True):
+        col_name, _ = st.columns([1, 1])
+        with col_name:
+            user_name = st.text_input("您的昵称 (选填):", value="热心科研狗")
+        
+        user_msg = st.text_area("留言内容:", placeholder="提问、Bug反馈或新功能建议...")
+        submitted = st.form_submit_button("发送留言", type="primary")
+        
+        if submitted:
+            if user_msg.strip() == "":
+                st.warning("留言内容不能为空哦！")
+            else:
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                # 追加到 DataFrame 并保存
+                new_row = pd.DataFrame([{"时间": timestamp, "昵称": user_name, "留言内容": user_msg.replace('\n', ' ')}])
+                df_updated = pd.concat([df_msg, new_row], ignore_index=True)
+                df_updated.to_csv(FORUM_FILE, index=False, encoding="utf-8-sig")
+                
+                st.toast("留言发表成功！", icon="🎉")
+                st.rerun() # 立即刷新页面，让用户看到自己的留言
