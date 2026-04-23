@@ -253,7 +253,7 @@ with col_info:
         ### ⚖️ 免责声明
         本工具采用 Python 生态标准算法库构建，仅供科学研究与学术交流使用。重要结论请结合实验原始图谱人工复核。
         
-        *系统架构: Python/Streamlit | 算法构建: Zzy522* 
+        *系统架构: Python/Streamlit | 开发者: Zzy522* 
         """)
 
 with col_feedback:
