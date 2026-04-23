@@ -254,9 +254,8 @@ init_forum()
 col_info, col_forum = st.columns([1, 1])
 
 with col_info:
-    st.markdown("### 📖 工具说明")
+    # st.markdown("### 📖 工具说明")
     st.markdown("""
-    **功能概览：**
     ### 🛠 功能说明
     1. **数据输入**：支持从 Excel 复制粘贴多列数据。第一列为浓度，后续列为对应的重复实验值。小数(如0.95)或百分比(95)系统会自动兼容。
     2. **DC50 计算逻辑**：
