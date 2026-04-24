@@ -228,7 +228,7 @@ if st.button("🚀 生成图表与分析报告", use_container_width=True, type=
 # ================= 4. 底部：说明文档与互动论坛 =================
 st.markdown("---")
 
-ADMIN_PASSWORD = "qinlab_admin"
+ADMIN_PASSWORD = "52252249"
 FORUM_FILE = "forum_messages.csv"
 
 def init_forum():
