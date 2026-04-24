@@ -176,7 +176,7 @@ st.title("🔬 药物剂量-效应曲线在线拟合工具")
 st.markdown("支持降解剂 ($DC_{50}$) / 抑制剂 ($IC_{50}$) 的多参数 4PL 拟合。")
 
 # 占位图提示（防止用户不知道在哪看图）
-st.image("https://placehold.co/800x120?text=Paste+your+data+below+and+click+'Generate'", caption="示例占位区，生成后的图表将在此区域下方展示")
+# st.image("https://placehold.co/800x120?text=Paste+your+data+below+and+click+'Generate'", caption="示例占位区，生成后的图表将在此区域下方展示")
 
 COLORS = {'深蓝色': '#1f77b4', '深红色': '#d62728', '森林绿': '#2ca02c', '紫色': '#9467bd', '橙色': '#ff7f0e', '黑色': 'black'}
 MARKERS = {'圆点 (●)': 'o', '方块 (■)': 's', '正三角 (▲)': '^', '倒三角 (▼)': 'v', '菱形 (◆)': 'D', '叉号 (×)': 'x'}
@@ -306,7 +306,7 @@ with col_forum:
     with st.form("post_msg_form", clear_on_submit=True):
         col_name, _ = st.columns([1, 1])
         with col_name:
-            user_name = st.text_input("您的昵称 (选填):", value="热心科研狗")
+            user_name = st.text_input("您的昵称 (选填):", value="热心科研猫")
         
         user_msg = st.text_area("留言内容:", placeholder="提问、Bug反馈或新功能建议...")
         submitted = st.form_submit_button("发送留言", type="primary")
