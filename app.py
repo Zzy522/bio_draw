@@ -11,7 +11,7 @@ import warnings
 # 忽略曲线拟合时的数学警告
 warnings.filterwarnings('ignore')
 
-# ================= 1. 访问统计与反馈持久化逻辑 =================
+# ================= 1. 访问统计与论坛持久化逻辑 =================
 def get_visitor_count():
     count_file = "visitor_count.txt"
     if not os.path.exists(count_file):
@@ -25,17 +25,6 @@ def update_visitor_count():
     count = get_visitor_count() + 1
     with open("visitor_count.txt", "w") as f: f.write(str(count))
     return count
-
-def save_feedback(text):
-    feedback_file = "feedback_log.csv"
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if not os.path.exists(feedback_file):
-        with open(feedback_file, "w", encoding="utf-8-sig") as f:
-            f.write("时间,内容\n")
-    with open(feedback_file, "a", encoding="utf-8-sig") as f:
-        # 替换英文逗号防止破坏 CSV 格式
-        safe_text = text.replace(',', '，').replace('\n', ' ')
-        f.write(f"{timestamp},{safe_text}\n")
 
 # 防止同一用户刷新页面导致重复计数
 if 'visited' not in st.session_state:
@@ -118,8 +107,8 @@ def process_and_plot(title, xlabel, ylabel, unit, n_reps, groups_data, dpi_val, 
             
             legend_label = f"{group['name']}\n$DC_{{50}}$={dc50_str} ; $D_{{max}}$={dmax_str}" if show_params else group['name']
             
-            # 画点/误差棒
-            if mean_dmax >= 50.0 and n_reps > 1:
+            # 【核心修改点】：无论 Dmax 是否大于 50%，只要 n>1 均强制画出误差棒
+            if n_reps > 1:
                 ax.errorbar(x_mapped, y_mean, yerr=y_sd, fmt=group['marker'], color=group['color'], ecolor=group['color'], elinewidth=1.5, capsize=group['cap'], label=legend_label, zorder=5)
             else:
                 ax.scatter(x_mapped, y_mean, color=group['color'], marker=group['marker'], s=60, label=legend_label, zorder=5)
@@ -186,6 +175,9 @@ ui_ylabel = st.sidebar.text_input("Y轴名称:", "Degradation Ratio (%)")
 st.title("🔬 药物剂量-效应曲线在线拟合工具")
 st.markdown("支持降解剂 ($DC_{50}$) / 抑制剂 ($IC_{50}$) 的多参数 4PL 拟合。")
 
+# 占位图提示（防止用户不知道在哪看图）
+st.image("https://placehold.co/800x120?text=Paste+your+data+below+and+click+'Generate'", caption="示例占位区，生成后的图表将在此区域下方展示")
+
 COLORS = {'深蓝色': '#1f77b4', '深红色': '#d62728', '森林绿': '#2ca02c', '紫色': '#9467bd', '橙色': '#ff7f0e', '黑色': 'black'}
 MARKERS = {'圆点 (●)': 'o', '方块 (■)': 's', '正三角 (▲)': '^', '倒三角 (▼)': 'v', '菱形 (◆)': 'D', '叉号 (×)': 'x'}
 
@@ -233,17 +225,12 @@ if st.button("🚀 生成图表与分析报告", use_container_width=True, type=
             for text in reports:
                 st.markdown(text)
 
-st.markdown("---")
-
-# --- 底部：说明文档与反馈 ---
 # ================= 4. 底部：说明文档与互动论坛 =================
 st.markdown("---")
 
-# 定义管理员密码 (请自行修改)
-ADMIN_PASSWORD = "5225249"
+ADMIN_PASSWORD = "qinlab_admin"
 FORUM_FILE = "forum_messages.csv"
 
-# 初始化论坛文件
 def init_forum():
     if not os.path.exists(FORUM_FILE):
         df = pd.DataFrame(columns=["时间", "昵称", "留言内容"])
